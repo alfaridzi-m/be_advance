@@ -10,8 +10,13 @@ const User = db.define('User', {
   username: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true
-  },
+    unique: true,
+    validate: {
+      notContains:{
+        args: ' ',
+        msg: 'Username tidak boleh mengandung spasi.'
+      }
+  }},
   email: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -19,7 +24,7 @@ const User = db.define('User', {
   },
   password: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: false,
   }
 }, {
   timestamps: false, 
