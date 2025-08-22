@@ -2,6 +2,8 @@ const bcrypt = require("bcrypt");
 const { Op } = require("sequelize");
 const User = require('../models/user.model.js');
 const jwt = require("jsonwebtoken");
+const { sendVerificationEmail } = require('../services/email.service.js');
+const { v4: uuidv4 } = require('uuid');
 
 
 const login = async (req, res) => {
@@ -35,17 +37,20 @@ const register = async (req, res) => {
         if (!fullname || !username || !email || !password) {
             return res.status(400).json({ message: "Semua field (fullname, username, email, password) harus diisi." });
         }
-
+        const verificationToken = uuidv4();
         const hashPassword = await bcrypt.hash(password, 10);
 
         const newUser = await User.create({
             fullname,
             username,
             email,
-            password: hashPassword
+            password: hashPassword,
+            verificationToken:verificationToken,
+            isVerified: false
         });
+        sendVerificationEmail(newUser.email, newUser.fullname, verificationToken);
         return res.status(201).json({
-            message: 'User berhasil ditambahkan'
+            message: 'User berhasil ditambahkan, cek email untuk verifikasi.'
         });
 
     } catch (error) {
@@ -149,11 +154,58 @@ const deleteUser = async (req, res) => {
     }
 }
 
+
+const verifyEmail = async (req,res) => {
+    try {
+        const { token } = req.query;
+        if(!token) {
+            return res.status(400).json({ message: "Token verifikasi tidak ditemukan." });
+        }
+        const user = await User.findOne({ where: { verificationToken: token } });
+        if (!user) {
+            return res.status(404).json({ message: "Token verifikasi tidak valid." });
+        }
+        user.isVerified = true;
+        user.verificationToken = null;
+        await user.save();
+        res.status(200).json('<h1>Verifikasi email berhasil!</h1><p>Anda sekarang bisa login ke aplikasi.</p>')
+    } catch (error) {
+        console.error("ERROR SAAT VERIFIKASI EMAIL:", error);
+        res.status(500).json({ message: "Terjadi kesalahan pada server." });
+    }
+}
+
+const uploadProfilePicture = async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: "Tidak ada file yang diunggah." });
+        }
+    const userId = req.user.id;
+    const user = await User.findByPk(userId);
+    if (!user) {
+        return res.status(404).json({ message: "User tidak ditemukan." });
+    }
+    const filePath = req.file.path;
+    user.profile_image_url = filePath;
+    await user.save();
+
+    res.status(200).json({
+        message: "Foto profil berhasil diunggah.",
+        filePath: filePath
+    })
+    }catch (error) {
+        console.error("ERROR SAAT UPLOAD PROFILE PICTURE:", error);
+        res.status(500).json({ message: "Terjadi kesalahan pada server." });
+    }
+}
+
 module.exports = {
     register,
     getAllUsers,
     getUserByUsername,
     updateUser,
     deleteUser,
-    login
+    login,
+    verifyEmail,
+    uploadProfilePicture
 };
